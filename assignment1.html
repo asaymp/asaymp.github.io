@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+
+  <!--title-->
+<title>Core housing need by federal electoral district</title>
+
+<!--Link to Leaflet CSS document-->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+
+<!--Link to Leaflet JS API-->
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+<!-- Style the map; have it fill the whole page-->
+<style>
+  html { height: 100% }
+  body { height: 100%; margin: 0; padding: 0 }
+  #map { width: 100%; height: 100%}
+</style>
+
+<!--Style the information box and the legend-->
+<style>
+  .info {
+    padding: 6px 8px;
+    font: 14px/16px Arial, Helvetica, sans-serif;
+    background: white;
+    background: rgba(255,255,255,0.8);
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    border-radius: 5px;
+  }
+  .info h4 {
+    margin: 0 0 5px;
+    color: #777;
+  }
+  .legend {
+    line-height: 18px;
+    color: #555;
+  }
+  .legend i {
+      width: 18px;
+      height: 18px;
+      float: left;
+      margin-right: 8px;
+      opacity: 0.7;
+  }
+</style>
+
+</head>
+
+<body>
+  <!--Declare map div container to place the map inside on the page-->
+  <div id="map"></div>
+
+<!--Point to the core housing need data-->
+<script type="text/javascript" src="fedchn.js"></script>
+
+<!--Define the map layers and functionality-->
+<script type="text/javascript">
+
+    var mapboxAccessToken = 'pk.eyJ1IjoiYXNhbXAiLCJhIjoiY2t0enhyc2NwMGN6MjJwbXc1dmI4cHk3dSJ9.9ttBYHDPMzOAJnaW6FhGqQ';
+    
+    //define the map; set map centrepoint and zoom for when the map initially loads
+    var map = L.map('map').setView([63, -100], 3.5);
+
+    //use your mapbox access token to get the basemap from mapbox
+    L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=' + mapboxAccessToken, {
+        id: 'mapbox/light-v9',
+        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+			'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+        tileSize: 512,
+        zoomOffset: -1
+    }).addTo(map);
+
+    
+    var info = L.control();
+
+    //create a div with a class "info"
+    info.onAdd = function (map) {
+        this._div = L.DomUtil.create('div', 'info');
+        this.update();
+        return this._div;
+    };
+
+     //define method to update the control based on feature properties passed
+     info.update = function (props) {
+        this._div.innerHTML = '<h4>Rate of Core Housing Need</h4>' +  (props ?
+            '<b>' + props[ 'FED_CEF (1).csv.Geography name, English / Nom de la géographie, anglais'] + '</b><br />' + props[ 'FED_CEF (2).csv.Rate of core housing need, 2016(1) / Taux des besoins impérieux en matière de logement, 2016(1)' ] + ' % of population'
+            : 'Hover over a Federal Electoral District');
+    };
+
+    info.addTo(map);
+
+    //define fuction to get colour dependig on core housing need rate
+    function getColor(chn) {
+      return chn > 30 ? '#800026' :
+            chn > 25  ? '#BD0026' :
+            chn > 20  ? '#E31A1C' :
+            chn > 15  ? '#FC4E2A' :
+            chn > 10   ? '#FD8D3C' :
+            chn > 5   ? '#FEB24C' :
+            chn > 0   ? '#FED976' :
+                        '#FFEDA0';
+  }
+
+    //define function to style the map features (regions), where the colour is based on the rate of CHN as of 2016
+    function style(feature) {
+      return {
+          fillColor: getColor(feature.properties[ 'FED_CEF (2).csv.Rate of core housing need, 2016(1) / Taux des besoins impérieux en matière de logement, 2016(1)' ]),
+          weight: 2,
+          opacity: 1,
+          color: 'white',
+          dashArray: '3',
+          fillOpacity: 0.7
+      };
+  }
+
+    //define function to highlight a feature
+    function highlightFeature(e) {
+        var layer = e.target;
+
+        layer.setStyle({
+            weight: 5,
+            color: '#666',
+            dashArray: '3',
+            fillOpacity: 0.7
+        });
+
+        if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+            layer.bringToFront();
+        }
+
+      info.update(layer.feature.properties);  
+    }
+
+    //define a function to reset a feature's style (unhighlight)
+    function resetHighlight(e) {
+      geojson.resetStyle(e.target);
+      info.update();
+      }
+     
+     //define a function to zoome to and centre a feature 
+    function zoomToFeature(e) {
+        map.fitBounds(e.target.getBounds());
+    }
+
+    //define a function that associates the above functions with actions
+    //highlight feature on mouseover; unhighlight on mouseout; zoom to feature on click
+    function onEachFeature(feature, layer) {
+        layer.on({
+            mouseover: highlightFeature,
+            mouseout: resetHighlight,
+            click: zoomToFeature
+        });
+    }
+
+    //
+    geojson = L.geoJson(geoData, {
+        style: style,
+        onEachFeature: onEachFeature
+    }).addTo(map);
+   
+    map.attributionControl.addAttribution('CHN data &copy; <a href="https://www12.statcan.gc.ca/census-recensement/2016/dp-pd/chn-biml/index-eng.cfm">Statistics Canada</a>');
+
+    var legend = L.control({position: 'bottomright'});
+
+    legend.onAdd = function (map) {
+
+      var div = L.DomUtil.create('div', 'info legend'),
+          grades = [0, 5, 10, 15, 20, 25, 30],
+          labels = [],
+          from, to;
+
+      // loop through our density intervals and generate a label with a colored square for each interval
+      for (var i = 0; i < grades.length; i++) {
+        from = grades[i];
+        to = grades[i+1];
+
+        labels.push(
+              '<i style="background:' + getColor(grades[i] + 1) + '"></i> ' +
+              from + (to ? '&ndash;' + to : '+'));
+      }
+
+      div.innerHTML = labels.join('<br>');
+      return div;
+    };
+
+    legend.addTo(map);
+
+</script>
+</body>
+</html>
